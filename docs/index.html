@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ENSIM Trade Center — my trader</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 980px; margin: 2rem auto; padding: 0 1rem; }
+  nav a { margin-right: 1rem; }
+  h2 { margin-top: 2.5rem; }
+  .section-for { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.03em; }
+  .kpis { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+  .kpi { flex: 1; min-width: 160px; padding: 0.8rem 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  .kpi .value { font-size: 1.5rem; font-weight: bold; color: #0d7c9e; }
+  .kpi .label { font-size: 0.8rem; color: #666; }
+  .empty-note { padding: 0.8rem 1rem; border: 1px dashed #999; border-radius: 8px; color: #555; font-size: 0.9rem; }
+  .products { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .products > div { flex: 1; min-width: 280px; }
+  canvas { margin-top: 1rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #ddd; }
+  #updated { color: #666; font-size: 0.85rem; margin-top: 2rem; }
+</style>
+</head>
+<body>
+  <nav><strong>Dashboard</strong> | <a href="sanity.html">Raw feed check</a> | <a href="https://github.com/Ismail-Achibat-TD-TP-BI/ensim-trader-ismail" target="_blank">Repo</a></nav>
+  <h1>ENSIM Trade Center — my trader</h1>
+  <p>A real, automated trader: a signal computed from real price history, trading every 30 minutes against the organizer's live market, tracked against the three baseline traders.</p>
+
+  <div class="kpis" id="kpis">Loading...</div>
+
+  <h2>Performance vs. baselines</h2>
+  <div class="section-for">For: me, deciding whether to keep this strategy or change it</div>
+  <p>One line per trader over real time, not a single end-of-game number — the decision this supports is "am I actually beating a dumb strategy, and since when," which only a trajectory answers. The three organizer-flagged baseline traders (random buyer, random seller, random trader) are logged alongside me every tick, since the organizer only ever publishes a current snapshot, never a history, for any trader.</p>
+  <div id="perfChartArea"><canvas id="perfChart" height="280"></canvas></div>
+
+  <h2>Risk (volatility)</h2>
+  <div class="section-for">For: me, judging whether a return is worth its swings</div>
+  <p>A rolling standard deviation of my own tick-to-tick returns, over time — not a single number, because risk itself can rise or fall as the strategy's exposure changes. A high-return, high-swing run should not look identical to a steady one on the performance chart alone.</p>
+  <div id="riskChartArea"></div>
+
+  <h2>Product-level signal</h2>
+  <div class="section-for">For: me, understanding what my own algorithm is actually doing</div>
+  <p>Three small multiples, not one shared chart — A, B and C trade on genuinely different price scales and (per the report) genuinely different dynamics, so forcing them onto one axis would hide more than it shows. Each panel shows the real price and the resulting signal over time, so a swing in the signal can be checked directly against the price move that caused it.</p>
+  <div class="products" id="productCharts"></div>
+
+  <h2>Decision log</h2>
+  <div class="section-for">For: me (and my report), explaining the trajectory, not just showing it</div>
+  <p>A table, not a chart — a manager (or an examiner) checking a specific past decision needs the exact reason, not a visual estimate, same reasoning this course used for every other "exact figures someone will act on" table.</p>
+  <div id="logTableArea"></div>
+
+  <p id="updated"></p>
+
+<script>
+Promise.all([
+  fetch('data/performance_history.json').then(r => r.json()),
+  fetch('data/signal_history.json').then(r => r.json()),
+  fetch('data/decision_log.json').then(r => r.json()),
+]).then(([perf, sig, log]) => {
+  const points = perf.points || [];
+  const baselineIds = perf.baseline_ids || [];
+  const labels = points.map(p => `t${p.t}`);
+  const latest = points[points.length - 1];
+
+  const bestBaseline = baselineIds.length
+    ? Math.max(...baselineIds.map(id => latest[id]))
+    : null;
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="value">${latest ? latest.me.toFixed(0) : '—'}</div><div class="label">My total value</div></div>
+    <div class="kpi"><div class="value">${bestBaseline !== null ? bestBaseline.toFixed(0) : '—'}</div><div class="label">Best baseline right now</div></div>
+    <div class="kpi"><div class="value">${latest ? (latest.me - bestBaseline).toFixed(0) : '—'}</div><div class="label">My edge vs. best baseline</div></div>
+    <div class="kpi"><div class="value">${points.length}</div><div class="label">Ticks logged</div></div>
+  `;
+
+  // --- Performance vs baselines ---
+  const palette = { me: '#0d7c9e', random_buyer: '#c46e0a', random_seller: '#8b2ea0', random_trader: '#2e8b46' };
+  const datasets = [{ label: 'Me', data: points.map(p => p.me), borderColor: palette.me, backgroundColor: 'transparent', borderWidth: 2 }];
+  baselineIds.forEach(id => {
+    datasets.push({ label: id, data: points.map(p => p[id]), borderColor: palette[id] || '#888', backgroundColor: 'transparent', borderWidth: 1, borderDash: [4, 3] });
+  });
+  new Chart(document.getElementById('perfChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: { plugins: { title: { display: true, text: 'Total portfolio value over time' } },
+      scales: { y: { title: { display: true, text: 'Total value' } } } },
+  });
+
+  // --- Risk (rolling volatility of returns) ---
+  const RISK_WINDOW = 5;
+  const values = points.map(p => p.me);
+  const returns = values.slice(1).map((v, i) => (v - values[i]) / values[i]);
+  if (returns.length < RISK_WINDOW) {
+    document.getElementById('riskChartArea').innerHTML =
+      `<p class="empty-note">Not enough ticks yet for a rolling volatility window (need ${RISK_WINDOW}+ return observations, have ${returns.length}). ` +
+      `This will fill in honestly as the market ticks; an empty/flat chart here would be misleading.</p>`;
+  } else {
+    const rollingStd = [];
+    for (let i = RISK_WINDOW - 1; i < returns.length; i++) {
+      const window = returns.slice(i - RISK_WINDOW + 1, i + 1);
+      const mean = window.reduce((a, b) => a + b, 0) / window.length;
+      const variance = window.reduce((a, b) => a + (b - mean) ** 2, 0) / window.length;
+      rollingStd.push(Math.sqrt(variance));
+    }
+    document.getElementById('riskChartArea').innerHTML = '<canvas id="riskChart" height="200"></canvas>';
+    new Chart(document.getElementById('riskChart'), {
+      type: 'line',
+      data: { labels: labels.slice(1 + RISK_WINDOW - 1), datasets: [{ label: `Rolling ${RISK_WINDOW}-tick return volatility`, data: rollingStd, borderColor: '#c46e0a', backgroundColor: 'transparent' }] },
+      options: { plugins: { legend: { display: false }, title: { display: true, text: `Rolling ${RISK_WINDOW}-tick volatility of my own returns` } } },
+    });
+  }
+
+  // --- Product-level signal, small multiples ---
+  const sigPoints = sig.points || [];
+  const products = sigPoints.length ? Object.keys(sigPoints[0]).filter(k => k !== 't' && k !== 'timestamp') : [];
+  const container = document.getElementById('productCharts');
+  products.forEach(p => {
+    const div = document.createElement('div');
+    const canvasId = `prodChart_${p}`;
+    div.innerHTML = `<h3>${p}</h3><canvas id="${canvasId}" height="220"></canvas>`;
+    container.appendChild(div);
+    const prices = sigPoints.map(r => r[p].price);
+    const signals = sigPoints.map(r => r[p].signal);
+    new Chart(document.getElementById(canvasId), {
+      data: {
+        labels: sigPoints.map(r => `t${r.t}`),
+        datasets: [
+          { type: 'line', label: 'Price', data: prices, borderColor: '#1a1a2e', backgroundColor: 'transparent', yAxisID: 'y', borderWidth: 2 },
+          { type: 'bar', label: 'Signal', data: signals, backgroundColor: signals.map(s => s >= 0 ? 'rgba(46,139,70,0.5)' : 'rgba(196,110,10,0.5)'), yAxisID: 'y1' },
+        ],
+      },
+      options: {
+        plugins: { title: { display: true, text: `${p}: price (line) vs. signal (bars)` } },
+        scales: {
+          y: { position: 'left', title: { display: true, text: 'Price' } },
+          y1: { position: 'right', min: -1, max: 1, grid: { drawOnChartArea: false }, title: { display: true, text: 'Signal' } },
+        },
+      },
+    });
+  });
+
+  // --- Decision log table ---
+  const entries = (log.entries || []).slice().reverse(); // most recent first
+  const prodKeys = entries.length ? Object.keys(entries[0].decision) : [];
+  document.getElementById('logTableArea').innerHTML = `
+    <table>
+      <thead><tr><th>Tick</th><th>Time</th>${prodKeys.map(p => `<th>${p}</th>`).join('')}<th>Why</th></tr></thead>
+      <tbody>
+        ${entries.map(e => `<tr>
+          <td>${e.t}</td><td>${e.timestamp}</td>
+          ${prodKeys.map(p => `<td>${e.decision[p]}</td>`).join('')}
+          <td style="font-size:0.8rem;">${prodKeys.map(p => `${p}: ${e.reason[p]}`).join('<br>')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  document.getElementById('updated').textContent = latest ? `Last tick logged: t${latest.t} (${latest.timestamp})` : '';
+}).catch(err => {
+  document.getElementById('kpis').innerHTML = '<p>Could not load dashboard data (' + err + ').</p>';
+});
+</script>
+</body>
+</html>

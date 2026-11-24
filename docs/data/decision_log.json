@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "t": 376,
+      "timestamp": "2026-11-24T13:40:02Z",
+      "decision": {
+        "A": 0.143,
+        "B": 0.202,
+        "C": -0.597
+      },
+      "reason": {
+        "A": "real downtrend (trend_z=-0.35), already extended, sized down (z=-1.21)",
+        "B": "real uptrend (trend_z=+2.87), already extended, sized down (z=+1.65)",
+        "C": "real downtrend (trend_z=-2.90), good entry point (z=+0.68)"
+      }
+    }
+  ]
+}

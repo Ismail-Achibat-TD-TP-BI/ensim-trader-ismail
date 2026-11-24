@@ -1,0 +1,17 @@
+{
+  "baseline_ids": [
+    "random_buyer",
+    "random_trader",
+    "random_seller"
+  ],
+  "points": [
+    {
+      "t": 376,
+      "timestamp": "2026-11-24T13:40:02Z",
+      "me": 19180.5,
+      "random_buyer": 19048.8,
+      "random_trader": 18512.97,
+      "random_seller": 18005.8
+    }
+  ]
+}
