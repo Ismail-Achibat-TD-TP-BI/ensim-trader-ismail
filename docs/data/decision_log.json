@@ -27,6 +27,20 @@
         "B": "real uptrend (trend_z=+2.87), already extended, sized down (z=+1.83)",
         "C": "real downtrend (trend_z=-2.90), good entry point (z=+0.86)"
       }
+    },
+    {
+      "t": 378,
+      "timestamp": "2026-11-25T05:34:15Z",
+      "decision": {
+        "A": 0.085,
+        "B": 0.197,
+        "C": -0.67
+      },
+      "reason": {
+        "A": "real downtrend (trend_z=-0.37), already extended, sized down (z=-0.88)",
+        "B": "real uptrend (trend_z=+2.88), already extended, sized down (z=+1.70)",
+        "C": "real downtrend (trend_z=-2.90), good entry point (z=+1.12)"
+      }
     }
   ]
 }
