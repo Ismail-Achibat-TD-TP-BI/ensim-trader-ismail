@@ -68,6 +68,14 @@
       "random_buyer": 19841.83,
       "random_trader": 19661.83,
       "random_seller": 18005.8
+    },
+    {
+      "t": 386,
+      "timestamp": "2026-11-27T11:08:45Z",
+      "me": 19840.98,
+      "random_buyer": 19606.04,
+      "random_trader": 19588.08,
+      "random_seller": 18005.8
     }
   ]
 }
